@@ -1,0 +1,88 @@
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>소음 측정기</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding-top: 50px;
+      background: #f0f0f0;
+    }
+    button {
+      font-size: 18px;
+      margin: 10px;
+      padding: 10px 20px;
+    }
+    #status {
+      font-size: 24px;
+      margin-top: 30px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎤 소음 측정기</h1>
+  <button onclick="startMic()">시작</button>
+  <button onclick="stopMic()">중지</button>
+  <div id="status">데시벨 측정 중지됨</div>
+
+  <script>
+    let micStream, audioContext, analyser, microphone, javascriptNode;
+
+    async function startMic() {
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        microphone = audioContext.createMediaStreamSource(micStream);
+        javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
+
+        analyser.smoothingTimeConstant = 0.8;
+        analyser.fftSize = 1024;
+
+        microphone.connect(analyser);
+        analyser.connect(javascriptNode);
+        javascriptNode.connect(audioContext.destination);
+
+        document.getElementById("status").textContent = "데시벨 측정 중...";
+
+        javascriptNode.onaudioprocess = function () {
+          const array = new Uint8Array(analyser.frequencyBinCount);
+          analyser.getByteFrequencyData(array);
+          let values = 0;
+          array.forEach(v => values += v);
+          const average = values / array.length;
+          const decibel = Math.round(20 * Math.log10(average));
+          document.getElementById("status").textContent = `현재 데시벨: ${decibel}dB`;
+          if (decibel > 65) {
+            speakWarning();
+          }
+        };
+      } catch (e) {
+        alert('마이크 접근에 실패했습니다: ' + e);
+      }
+    }
+
+    function stopMic() {
+      if (micStream) {
+        micStream.getTracks().forEach(track => track.stop());
+        micStream = null;
+      }
+      if (audioContext) {
+        audioContext.close();
+        audioContext = null;
+      }
+      document.getElementById("status").textContent = "데시벨 측정 중지됨";
+    }
+
+    function speakWarning() {
+      const msg = new SpeechSynthesisUtterance('조용히 하세요!');
+      msg.lang = 'ko-KR';
+      window.speechSynthesis.speak(msg);
+    }
+  </script>
+</body>
+</html>
